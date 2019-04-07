@@ -22,6 +22,7 @@ import keras.backend as K
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
+import tensorflow as tf
 
 from mrcnn import utils
 
@@ -443,6 +444,7 @@ class PyramidROIAlign(KE.Layer):
 
         # Re-add the batch dimension
         shape = tf.concat([tf.shape(boxes)[:2], tf.shape(pooled)[1:]], axis=0)
+        tf.Print(shape, [shape])
         pooled = tf.reshape(pooled, shape)
         return pooled
 
@@ -925,7 +927,7 @@ def fpn_classifier_graph(rois, feature_maps, image_meta,
                         name="roi_align_classifier")([rois, image_meta] + feature_maps)
     # Two 1024 FC layers (implemented with Conv2D for consistency)
     x = KL.TimeDistributed(KL.Conv2D(fc_layers_size, (pool_size, pool_size), padding="valid"),
-                           name="mrcnn_class_conv1")(x)
+                           name="mrcnn_class_conv1")(x)  # padding valid using convolution layer to convert to 1d
     x = KL.TimeDistributed(BatchNorm(), name='mrcnn_class_bn1')(x, training=train_bn)
     x = KL.Activation('relu')(x)
     x = KL.TimeDistributed(KL.Conv2D(fc_layers_size, (1, 1)),
@@ -934,7 +936,7 @@ def fpn_classifier_graph(rois, feature_maps, image_meta,
     x = KL.Activation('relu')(x)
 
     shared = KL.Lambda(lambda x: K.squeeze(K.squeeze(x, 3), 2),
-                       name="pool_squeeze")(x)
+                       name="pool_squeeze")(x)  # (None, 32, 1, 1, 1024) -> (None, 1024)
 
     # Classifier head
     mrcnn_class_logits = KL.TimeDistributed(KL.Dense(num_classes),
@@ -2370,8 +2372,8 @@ class MaskRCNN():
             validation_data=val_generator,
             validation_steps=self.config.VALIDATION_STEPS,
             max_queue_size=100,
-            workers=workers,
-            use_multiprocessing=True,
+            workers=1,
+            use_multiprocessing=False,
         )
         self.epoch = max(self.epoch, epochs)
 
